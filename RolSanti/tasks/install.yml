@@ -1,0 +1,441 @@
+# roles/rhbase/tasks/install.yml
+#
+# Install custom repositories and packages. Repositories should be installed
+# using an RPM package. A list of URLs to the RPMs for these repositories
+# should be specified in group_vars or host_vars.
+---
+##### BASIS INSTALLATIE ALGEMEEN
+
+- name: Enable SELinux
+  selinux:
+    policy: targeted
+    state: enforcing
+
+- name: bash-completion
+  action: yum name=bash-completion state=installed
+
+- name: installeer openssh
+  action: yum name=openssh state=installed
+
+- name: installeer openssl
+  yum:
+    name: openssl
+    state: latest
+
+- name: bind-utils
+  action: yum name=bind-utils state=installed
+
+- name: install bats
+  action: yum name=bats state=installed
+
+- name: install bind
+  action: yum name=bind state=installed
+
+- name: install git
+  action: yum name=git state=installed
+
+- name: install nano
+  action: yum name=nano state=installed
+
+- name: install tree
+  action: yum name=tree state=installed
+
+- name: install vim enhanced
+  action: yum name=vim-enhanced state=installed
+
+- name: install wget
+  action: yum name=wget state=installed
+
+- name: motd instellen
+  shell:
+    cmd: cat /etc/networks > /etc/motd
+
+- name: ga naar directory voor rol aan te maken
+  shell:
+    cmd: cd /etc/ansible/roles
+
+- name: installeer mod_ssl
+  yum:
+    name: mod_ssl
+    state: latest
+
+- name: enable firewall
+  shell:
+    cmd: sudo systemctl enable firewalld
+
+- name: add user voor wordpress als sudo user
+  user:
+    name: wp_user
+    comment: santi meremans
+    uid: 1420
+    group: wheel
+    generate_ssh_key: yes
+    ssh_key_bits: 2048
+    state: present
+
+- name: maak de directory voor de ssh key
+  file:
+    path: /home/wp_user/.ssh
+    state: directory
+    mode: 744
+
+- name: genereer ssh key bij wp_user  
+  openssh_keypair:
+    path: /home/wp_user/.ssh/id_rsa
+    size: 2048
+    state: present
+    type: rsa
+
+#- name: maak rol klaar
+#  shell:
+#    cmd: ansible-galaxy init lampje2
+
+
+#- name: kopier playbook lamp naar ansibleController
+#  template:
+#    src: lamp.yml
+#    dest: /etc/ansible/roles/lampje2/tasks
+
+##############ONDERSTAAND WERKT MAAR PASSWOORD WERKT NIET 
+############## NOG EENS PROBEREN MET ANDERE HASH
+
+
+# DE ROLES DIE WE INITIALISEREN MET DE GALAXY COMMANDO WORDT IN VAGRANT/ANSIBLE
+# GEZET MISSCHIEN KUNNEN WE NADENKEN OM DEZE ROLES VAN
+# HIERUIT TE MOVEN NAAR DE JUISTE /ETC/Ansible
+
+# vanaf hier code voor de webserver klaar te zetten
+
+
+
+###### HTTPD INSTALL
+- name: installeer apache
+  yum:
+    name: httpd
+    state: latest
+- name: enable apache manual
+  shell:
+    cmd: systemctl enable httpd
+
+- name: start httpd
+  service:
+    name: httpd
+    state: started
+
+
+#- name: verwijderen van welcome pagina
+#  file:
+#    path: /etc/httpd/conf.d/welcome.conf
+#    state: absent
+
+#- name: creëren folders voor virtual hosts
+#  file:
+#    path: /etc/httpd/sites-available
+#    state: directory
+#    mode: 0755
+
+#- name: creëren folders virtual hosts 2
+#  file:
+#    path: /etc/httpd/sites-enabled
+#    state: directory
+#    mode: 0755
+
+#- name: creëren directories voor apache
+#  file:
+#    path: /var/www/santi.com/html
+#    state: directory
+#    owner: root
+#    mode: 0750
+
+#- name: creëren directories voor apache-logs
+#  file:
+#    path: /var/www/santi.com/log
+#    state: directory
+#    owner: root
+#    mode: 740
+
+#- name: optionele apache config file toevoegen aan main config
+#  lineinfile:
+#    path: /etc/httpd/conf/httpd.conf
+#    line: IncludeOptional sites-enabled/*.conf
+#    insertafter: 'IncludeOptional conf.d/*.conf'
+
+#- name: virtualhost config integreren
+#  template:
+#    src: santi.com.conf
+#    dest: /etc/httpd/sites-enabled/
+    
+
+#- name: enable apache manual
+#  shell:
+#    cmd: systemctl start httpd
+#  notify:
+#    - herstart apache
+    
+
+
+##################INSTALLEREN MARIADB
+
+# onderstaande variabele zit in host vars en in default
+- name: installeer alle php modules
+  yum:
+    name: "{{ php_modules }}"
+    state: latest
+
+
+- name: installeer php dependencies
+  yum:
+    name: php-mysql
+    state: latest
+
+- name: installeer php dependencies
+  yum:
+    name: MySQL-python
+    state: latest
+
+- name: installeer dependency 3de poging
+  yum:
+    name: python3-PyMySQL
+    state: present
+
+- name: install mariadb-server
+  yum:
+    name: mariadb-server
+    state: latest
+
+- name: start mariadb
+  service:
+    name: mariadb
+    enabled: true
+    state: started
+
+- name: creëren mysql user met passwoord
+  mysql_user:
+    login_user: root
+    login_password: "{{ maria_db_root_password }}"
+    login_unix_socket: "/var/lib/mysql/mysql.sock"
+    check_implicit_admin: true
+    user: wp_user
+    password: "{{ maria_db_root_password }}"
+    host: localhost
+    state: present
+
+- name: config file voor mariadb hosts (users)
+  template:
+    src: my.cnf
+    dest: /etc/
+    owner: wp_user
+
+- name: verwijderen test mysql database
+  mysql_db:
+    name: test
+    state: absent
+    login_user: root
+
+- name: geeft de kans aan user om passwordless te zijn in wheel
+  template:
+    src: sudoers
+    dest: /etc/
+    owner: root
+
+- name: creër mysql wordpress database
+  mysql_db:
+    name: wp_db
+    state: present
+    password: ""
+    state: present
+  
+- name: Removes anonymous user account for localhost
+  mysql_user:
+    name: ''
+    host_all: yes
+    state: absent
+
+
+
+
+
+
+
+
+
+
+#- name: Sets thfte root password 
+#  mysql_user: user=root password="{{ mysql_root_password }}" host=localhost
+
+####### INSTALLEREN FIREWALL EN TOEVOEGEN REGELS
+- name: installeer firewalld
+  yum:
+    name: firewalld
+    state: installed
+
+- name: installeer firewall-config
+  action: yum name=firewall-config
+- name: start service firewallcmd
+  shell:
+    cmd: systemctl start firewalld
+
+- name: poort openzetten 443 (https)
+  shell:
+    cmd: firewall-cmd --permanent --add-port=443/tcp
+
+- firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+
+- firewalld:
+    service: https
+    permanent: yes
+    state: enabled
+
+- firewalld:
+    port: 80/tcp
+    permanent: yes
+    state: enabled
+  notify:
+    - herstart firewall
+
+
+## installatie wordpress + aanmaak user
+- name: Download WordPress  
+  yum:
+    name: wordpress
+    state: installed
+
+- name: creëren folders voor virtual hosts
+  file:
+    path: /etc/httpd/sites-available
+    state: directory
+    mode: 0755
+
+- name: creëren folders virtual hosts 2
+  file:
+    path: /etc/httpd/sites-enabled
+    state: directory
+    mode: 0755
+
+    #sudo: yes
+
+
+
+#passwoord is santi
+
+
+
+
+
+
+#- name: apache service toevoegen aan firewall
+#  shell:
+#    cmd: firewall-cmd --zone=public --permanent --add-port=3306
+#     cmd:  firewall-cmd --zone=public --add-service=https --permanent
+#     cmd:  firewall-cmd --zone=public --add-service=http --permanent
+#      notify:
+#      - herstartFirewall
+- name: firewall herstarten om regels te applyen (moet later met handlers)
+  shell:
+    cmd: systemctl restart firewalld
+#- name: dependencies binnentrekken om mysql user te creëren
+#  shell:
+#    cmd: yum -y install php-gd
+#    cmd: yum -y install php-xml
+
+#- name: installeer dependency 2de poging
+#  yum:
+#    name: python3
+#    state: latest
+
+    ## error met de dependecy: (Python 2.7 and Python 3.X)
+
+
+
+
+
+
+#- name: Install | Check minimal value of ‘rhbase_repo_installonly_limit’ (>= 2)
+#  debug:
+#    msg: >-
+#      The value of ‘rhbase_repo_installonly_limit’ should be at least 2,
+#      actual value is {{ rhbase_repo_installonly_limit }}.
+#  failed_when: rhbase_repo_installonly_limit < 2
+#  tags:
+#    - rhbase
+#    - install
+
+#- name: Install | Ensure the machine-ID is available
+#  command: systemd-machine-id-setup
+#  args:
+ #   creates: /etc/machine-id
+  #tags: rhbase
+
+#- name: Install | Ensure basic systemd services are running
+ # service:
+  #  name: "{{ item }}"
+   # state: started
+    #enabled: true
+#  with_items: "{{ rhbase_systemd_services }}"
+#  tags: rhbase
+
+#- name: Install | Role/Ansible dependencies
+ # package:
+  #  name: "{{ rhbase_dependencies }}"
+   # state: installed
+#  tags:
+ #   - rhbase
+  #  - install
+
+#- name: Install | Package management configuration ({{ rhbase_package_manager }})
+ # template:
+  #  src: "etc_{{ rhbase_package_manager }}.conf.j2"
+   # dest: "{{ rhbase_package_manager_configuration }}"
+    #owner: root
+#    group: root
+ #   mode: 0644
+ # tags:
+  #  - rhbase
+   # - install
+
+#- name: Install | Ensure specified external repositories are installed
+#  package:
+ #   name: "{{ rhbase_repositories }}"
+  #  state: installed
+ # tags:
+ #   - rhbase
+ #   - install
+
+#- name: Install | Ensure specified repositories are enabled
+ # lineinfile:
+  #  dest: "/etc/yum.repos.d/{{ item }}.repo"
+  #  line: 'enabled=1'
+#    state: present
+#    regexp: '^enabled='
+#  with_items: "{{ rhbase_enable_repos }}"
+#  tags:
+#    - rhbase
+#    - install
+
+#- name: Install | Ensure specified packages are installed
+#  package:
+ #   name: "{{ rhbase_install_packages }}"
+  #  state: installed
+ # tags:
+ #   - rhbase
+  #  - install
+
+#- name: Install | Ensure specified packages are NOT installed
+ # package:
+#    name: "{{ rhbase_remove_packages }}"
+ #   state: absent
+  #tags:
+ #   - rhbase
+  #  - install
+
+#- name: Install | Ensure all updates are installed
+ # package:
+  #  name: '*'
+   # state: latest
+#  when: rhbase_update
+ # tags:
+ #   - rhbase
+  #  - install

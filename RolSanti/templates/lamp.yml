@@ -1,0 +1,62 @@
+    - name: installeer openssl
+      yum:
+        name: openssl
+        state: latest
+    - name: installeer apache
+      yum:
+        name: apache2
+        state: latest
+    - name: installeer mod_ssl
+      yum:
+        name: mod_ssl
+        state: latest
+    - name: install mariadb
+      yum:
+        name: mariadb
+        state: latest
+    - name: installeer firewalld
+      yum:
+        name: firewalld
+        state: installed
+    - name: installeer firewall-config
+      action: yum name=firewall-config
+    - name: start service firewallcmd
+      shell:
+        cmd: systemctl start firewalld
+    - name: enable apache manual
+      shell:
+        cmd: systemctl enable httpd
+    - name: poort openzetten 443 (https)
+      shell:
+        cmd: firewall-cmd --permanent --add-port=443/tcp
+    - name: apache service toevoegen aan firewall
+      shell:
+        cmd: firewall-cmd --add-service=https
+        cmd: firewall-cmd --add-service=http
+      notify:
+      - herstartFirewall
+    - name: firewall herstarten om regels te applyen (moet later met handlers)
+      shell:
+        cmd: firewall-cmd --reload
+    - name: creëren directories voor apache
+      file:
+        path: /var/www/santi.com/html
+        state: directory
+        owner: root
+        mode: 0750
+    - name: creëren directories voor apache-logs
+      file:
+        path: /var/www/santi.com/log
+        state: directory
+        owner: root
+        mode: 740
+    - name: creëren folders voor virtual hosts
+      file:
+        path: /etc/httpd/sites-available
+        state: directory
+        mode: 0755
+    - name: creëren folders virtual hosts 2
+      file:
+        path: /etc/httpd/sites-enabled
+        state: directory
+        mode: 0755

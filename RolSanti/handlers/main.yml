@@ -1,0 +1,9 @@
+# roles/rh-base/handlers/main.yml
+---
+- name: herstart apache
+  shell:
+    cmd: sudo systemctl restart httpd
+
+- name: herstart firewall
+  shell:
+    cmd: sudo systemctl restart firewalld

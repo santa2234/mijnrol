@@ -1,0 +1,214 @@
+- name: Configureer dns server
+  hosts: servers
+  become: True
+  tasks:
+    - name: installeer openssl
+      yum:
+        name: openssl
+        state: latest
+    - name: installeer mod_ssl
+      yum:
+        name: mod_ssl
+        state: latest
+    - name: install mariadb
+      yum:
+        name: mariadb
+        state: latest
+    - name: install bind
+      action: yum name=bind state=installed
+    - name: install epel-release for nginx repos
+      action: yum name=epel-release state=installed
+    - name: install bind-utils
+      yum:
+        name: bind-utils
+        state: installed
+    - name: install apache en ntp
+      yum:
+        name:
+          - httpd
+         # - group info
+          - ntp
+        state: installed
+    - name: installeer firewalld
+      yum:
+        name: firewalld
+        state: installed
+    - name: installeer firewall-config
+      action: yum name=firewall-config
+    - name: start service firewallcmd
+      shell:
+        cmd: systemctl start firewalld
+    - name: enable apache manual
+      shell:
+        cmd: systemctl enable httpd
+    
+    - name: firewall herstarten
+      shell:
+        cmd: firewall-cmd --reload
+    - name: zet poort open voor apache
+       shell:
+        cmd: firewall-cmd --add-port=80/tcp
+#    - name: poort openzetten 443 (https)
+#      shell:
+#        cmd: firewall-cmd --permanent --add-port=443/tcp
+#    - name: apache service toevoegen aan firewall
+#      shell:
+#        cmd: firewall-cmd --add-service=https
+#        cmd: firewall-cmd --add-service=http
+
+    - name: start apache
+      shell:
+        cmd: systemctl start httpd
+  
+    - name: creëren directories voor apache
+      file:
+        path: /var/www/santi.com/html
+        state: directory
+        owner: root
+        mode: 0750
+    - name: creëren directories voor apache-logs
+      file:
+        path: /var/www/santi.com/log
+        state: directory
+        owner: root
+        mode: 740
+    - name: creëren folders voor virtual hosts
+      file:
+        path: /etc/httpd/sites-available
+        state: directory
+        mode: 0755
+    - name: creëren folders virtual hosts 2
+      file:
+        path: /etc/httpd/sites-enabled
+        state: directory
+        mode: 0755
+    - name: configureer tls stap 1 creeren directory
+      file:
+        path: /etc/httpd/ssl
+        state: directory
+        mode: 0755
+    - name: maak directories voor virtual hosts
+      file:
+        path: /var/www/santi.com/html
+        state: directory
+        mode: 0755
+#    - name: maak directories voor tls keys
+#      file
+#        path: /
+    - name: optionele apache config file toevoegen aan main config
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        line: IncludeOptional sites-enabled/*.conf
+        insertafter: 'IncludeOptional conf.d/*.conf'
+    #- name: verander user van domein naar apache zodat gebruikers deze kunnen zien
+     # shell:
+     #   cmd: chown apache:apache -R /var/www/santi.com
+    - name: veranderen ownership van root naar apache
+      file:
+        path: /var/www/santi.com
+        owner: apache
+        group: apache
+        mode: 0750
+    - name: kopier index pagina virtualhost
+      copy:
+        src: /etc/ansible/files/index.html
+        dest: /var/www/santi.com/html/
+    - name: kopier config file apache
+      copy:
+        src: /etc/ansible/files/santi.com.conf
+        dest: /etc/httpd/sites-available/
+   # - name: symbolische link maken van config file in site enabled naar site avail
+    #  shell:
+     #   cmd: ln -s /etc/httpd/sites-available/santi.com.conf /etc/httpd/sites-enabled/santi.com.conf`
+    - name: maak symbolische link van config file naar site enabled
+      file:
+        src: /etc/httpd/sites-available/santi.com.conf
+        dest: /etc/httpd/sites-enabled/santi.com.conf
+        state: link
+    - name: iptables leeg maken anders geen connectie
+      shell:
+        cmd: iptables -F
+    - name: herstart firewall
+      shell:
+        cmd: systemctl restart firewalld
+    - name: herstarten van service httpd
+      shell:
+        cmd: systemctl restart httpd
+#    - name: kopier virtualhost config file
+#      file:
+#        path: /etc/httpd/sites-available/santi.com.conf
+#        state: touch
+#        mode: 0644
+    - name: kopier index pagina virtualhost
+      copy:
+        src: /etc/ansible/files/index.html
+        dest: /var/www/santi.com/html/
+    - name: kopier config file apache
+      copy:
+        src: /etc/ansible/files/santi.com.conf
+        dest: /etc/httpd/sites-available/
+    - name: kopier TLS certificaat
+      copy:
+            src: /etc/ansible/files/ca.crt
+            dest: /etc/pki/tls/certs
+    - name: kopier tls key
+      copy:
+          src: /etc/ansible/files/ca.key
+          dest: /etc/pki/tls/private/ca.key
+    - name:
+      copy:
+          src: /etc/ansible/files/ca.csr
+          dest: /etc/pki/tls/private/ca.csr
+#    - name: kopier TLS key
+ #     copy:
+  #         src: /etc/ansible/files/sslTryOut/example.crt
+   #        dest: /etc/pki/tls/certs/
+    #       remote_src: no
+     #      owner: root
+      #     mode: 0600
+#    - name: kopier TLS certificaat
+#      copy:
+#           src: /etc/ansible/files/sslTryOut/myCA.key
+#           dest: /etc/pki/tls/private/
+#           remote_src: no
+#           owner: root
+#           mode: 0700
+#    - name: kopier crs file
+#      copy:
+#           src: /etc/ansible/files/sslTryOut/myCA.pem
+#           dest: /etc/pki/tls/private/
+#           remote_src: no
+#           owner: root
+#           mode: 0700
+    - firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+    - firewalld:
+        service: https
+        permanent: yes
+        state: enabled
+    - firewalld:
+        port: 80/tcp
+        permanent: yes
+        state: enabled
+    - firewalld:
+        port: 801/tcp
+        permanent: yes
+        state: enabled
+    - name: herstart firewall service om poorten toe te voegen (vervangen met handler)
+      shell:
+        cmd: systemctl restart httpd
+
+    
+#    - name: kopier de startpagina (vervangen van default pagina)
+#      template:
+#        src: index.html
+#        dest: /var/www/html/santi.com/
+    #  notify: herstart apache
+    #  notify: restart apache
+    #handlers:
+     # - name: herstart apache
+      #  service:
+       #   name:httpd
+        #  state: restarted
